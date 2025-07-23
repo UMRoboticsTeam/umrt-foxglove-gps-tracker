@@ -1,11 +1,11 @@
 {
   "name": "gps-tracker",
   "displayName": "gps-tracker",
-  "description": "",
-  "publisher": "unknown",
-  "homepage": "",
-  "version": "0.0.0",
-  "license": "UNLICENSED",
+  "description": "Pin GPS positions and view them on a Map",
+  "publisher": "University of Manitoba Robotics Team",
+  "homepage": "https://umrt.ca/",
+  "version": "0.0.1",
+  "license": "MPL-2.0",
   "main": "./dist/extension.js",
   "keywords": [],
   "scripts": {

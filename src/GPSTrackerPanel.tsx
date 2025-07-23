@@ -76,24 +76,31 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   };
 
   // Function to save custom GPS coordinates
-  const saveCustomPosition = () => {
-    const nameInput = document.getElementById("custom-tag-name") as HTMLInputElement;
-    const name = nameInput ? nameInput.value : "-";
+  // const saveCustomPosition = () => {
+  //   const nameInput = document.getElementById("custom-tag-name") as HTMLInputElement;
+  //   const name = nameInput ? nameInput.value : "-";
 
-    // const latitude = parseFloat(customLatitude);
-    // const longitude = parseFloat(customLongitude);
-    const latitudeInput = document.getElementById("custom-tag-latitude") as HTMLInputElement;
-    const latitude = parseFloat(latitudeInput ? latitudeInput.value : "-1");
-    const longitudeInput = document.getElementById("custom-tag-longitude") as HTMLInputElement;
-    const longitude = parseFloat(longitudeInput ? longitudeInput.value : "-1");
+  //   // const latitude = parseFloat(customLatitude);
+  //   // const longitude = parseFloat(customLongitude);
+  //   const latitudeInput = document.getElementById("custom-tag-latitude") as HTMLInputElement;
+  //   const latitude = parseFloat(latitudeInput ? latitudeInput.value : "-1");
+  //   const longitudeInput = document.getElementById("custom-tag-longitude") as HTMLInputElement;
+  //   const longitude = parseFloat(longitudeInput ? longitudeInput.value : "-1");
 
+  //   const distance = -1;
+
+  //   const timestamp = new Date().toISOString(); // Use current timestamp for custom positions
+  //   setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance }]);
+  //   // setCustomLatitude(""); // Clear input fields
+  //   // setCustomLongitude("");
+  // };
+
+  const saveCustomPosition = (name: string, latitude: number, longitude: number) => {
+    const timestamp = new Date().toISOString();
     const distance = -1;
 
-    const timestamp = new Date().toISOString(); // Use current timestamp for custom positions
     setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance }]);
-    // setCustomLatitude(""); // Clear input fields
-    // setCustomLongitude("");
-  };
+  }
 
 
   // function that updates comparing distances
@@ -115,7 +122,10 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const distance = Math.round((R * c) * 10) / 10;
+          
+          const distance = Math.round((R * c) * 10) / 10; // value in meters
+
+          // convert distance to nice numbers (m, km, ..? lightyears? actually idk OH just put it in the output)
   
           return { ...position, distance };
         }
@@ -125,6 +135,21 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   
     setSavedPositions(updatedPositions);
   };
+
+  const formatDistance = (distance: number) => {
+    // convert m to nice format (cm, m, km)
+    var output;
+    if (distance < 1) {
+      output = distance * 100 + " cm";
+    }
+    else if (distance < 1000) {
+      output = distance + " m";
+    }
+    else {
+      output = distance / 1000 + " km";
+    }
+    return output;
+  }
 
   // function updates pins
   const updatePin = async (index: number, show: boolean) => {
@@ -371,6 +396,11 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   };
 
   const updateSavedPosition = (property: keyof typeof savedPositions[0], index: number, value: string | number) => {
+    // logToRosout("Updating index " + index + " to " + value);
+    if (property == "name" && value == "DELETE") {
+      setSavedPositions(prev => prev.filter((_, i) => i !== index));
+      return;
+    }
     setSavedPositions(prev =>
       prev.map((pos, i) =>
         i === index ? { ...pos, [property]: value } : pos
@@ -390,6 +420,19 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
           }
           input[type=number] {
             -moz-appearance: textfield;
+          }
+          .gridItemStyle {
+            overflow: hidden;
+            white-space: nowrap;
+          }
+          .gridTextboxStyle {
+            background: none;
+            color: white;
+            border: none;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 100%;
           }
         `}
       </style>
@@ -444,25 +487,31 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
 
       
       <h3>Input Custom Position</h3>
-      <dialog id="favDialog">
+      <dialog id="CustomPositionDialog">
         <form method="dialog">
           <p>
-            <label>Favorite animal:</label>
-            <select id="favAnimal" name="favAnimal">
-              <option></option>
-              <option>Brine shrimp</option>
-              <option>Red panda</option>
-              <option>Spider monkey</option>
-            </select>
+            <label>Name:</label><input type="text" defaultValue="New" id="customNameInput" />
+            <br/>
+            <label>Latitude:</label><input type="number" id="customLatitudeInput"/>
+            <br/>
+            <label>Longitude:</label><input type="number" id="customLongitudeInput" />
           </p>
           <div>
-            <button id="cancel" type="reset">Cancel</button>
-            <button type="submit">Confirm</button>
+            <button type="reset" onClick={() => {
+              (document.getElementById("CustomPositionDialog") as HTMLDialogElement)?.close();
+            }}>Cancel</button>
+            <button type="reset" onClick={() => {
+              const name = (document.getElementById("customNameInput") as HTMLInputElement).value ?? "-";
+              const latitude = Number.parseFloat((document.getElementById("customLatitudeInput") as HTMLInputElement).value) ?? 0;
+              const longitude = Number.parseFloat((document.getElementById("customLongitudeInput") as HTMLInputElement).value) ?? 0;
+              saveCustomPosition(name, latitude, longitude);
+              (document.getElementById("CustomPositionDialog") as HTMLDialogElement)?.close();
+            }}>Confirm</button>
           </div>
         </form>
       </dialog>
-      <button onClick={saveCustomPosition} style={{ marginTop: "1rem" }}>Save Custom Position</button>
-      <button onClick={() => {(document.getElementById("favDialog") as HTMLDialogElement)?.showModal();}} style={{ marginTop: "1rem" }}>Open dialog</button>
+      {/* <button onClick={saveCustomPosition} style={{ marginTop: "1rem" }}>Save Custom Position</button> */}
+      <button onClick={() => {(document.getElementById("CustomPositionDialog") as HTMLDialogElement)?.showModal();}} style={{ marginTop: "1rem" }}>Open dialog</button>
       
       
       <div>
@@ -485,36 +534,39 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             {/* <input type="text">{position.name}</input> */}
             <input
               type="text"
-              defaultValue={position.name.toString()} // Set the initial value to position.name
-              style={gridTextboxStyle}
-              onChange={e => updateSavedPosition("name", index, e.target.value)}
+              value={position.name.toString()} // Set the initial value to position.name
+              className="gridTextboxStyle"
+              onChange={e => {
+                updateSavedPosition("name", index, e.target.value);
+                if (e.target.value == "DELETE") {e.target.blur();}
+              }}
+              onKeyDown={e => {if (e.key === "Enter") {(e.target as HTMLInputElement).blur();}}}
 
             />
-            {/* <div style={gridItemStyle} key={`latitude-${index}`}>{position.latitude}</div> */}
             <input
               type="number"
-              defaultValue={position.latitude}
-              style={gridTextboxStyle}
+              value={position.latitude}
+              className="gridTextboxStyle"
               onChange={e => updateSavedPosition("latitude", index, e.target.value)}
+              onKeyDown={e => {if (e.key === "Enter") {(e.target as HTMLInputElement).blur();}}}
             />
-            {/* <div style={gridItemStyle} key={`longitude-${index}`}>{position.longitude}</div> */}
             <input
               type="number"
-              defaultValue={position.longitude}
-              style={gridTextboxStyle}
+              value={position.longitude}
+              className="gridTextboxStyle"
               onChange={e => updateSavedPosition("longitude", index, e.target.value)}
+              onKeyDown={e => {if (e.key === "Enter") {(e.target as HTMLInputElement).blur();}}}
             />
-            {/* <div style={gridItemStyle} key={`timestamp-${index}`}>{position.timestamp}</div> */}
             <input
               type="text"
               defaultValue={position.timestamp}
-              style={gridTextboxStyle}
+              className="gridTextboxStyle"
             />
             <div key={`compare-${index}`}>
               {/* <input type="radio" name="compare" value={index} /> */}
               <input type="radio" name="compare" onClick={() => updateDistances(index)}/>
             </div>
-            <div style={gridItemStyle} key={`distance-${index}`}>{position.distance}</div>
+            <div className="gridItemStyle" key={`distance-${index}`}>{formatDistance(position.distance)}</div>
             <div key={`pinbox-${index}`}>
               <input type="checkbox" name="pin" onChange={(e) => updatePin(index, e.target.checked)}/>
             </div>
