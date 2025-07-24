@@ -1,7 +1,7 @@
 import { Immutable, MessageEvent, PanelExtensionContext, SettingsTreeAction, Topic } from "@foxglove/extension";
 import { ReactElement, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-import { property, set, values } from "lodash";
+import { set } from "lodash";
 
 type Config = {
   navigationTopic?: string
@@ -366,7 +366,7 @@ const updateDistances = () => {
   };
   
   const deleteAllPins = async () => {
-    savedPositions.forEach((position, index) => {
+    savedPositions.forEach((_position, index) => {
       updatePin(index, false);
     })
     setSavedPositions([]);

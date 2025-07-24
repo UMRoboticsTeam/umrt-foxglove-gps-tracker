@@ -1,9 +1,9 @@
 # gps-tracker
 
 Custom foxglove extension panel for keeping track of and pinpointing GPS coordinates.
-Calculates distances between points.
+Calculates distances between points and pins saved coordinates.
 
-
+Requires a transmitting topic of `/NavSatFix`
 
 
 
