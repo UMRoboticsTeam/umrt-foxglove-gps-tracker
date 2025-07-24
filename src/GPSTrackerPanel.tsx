@@ -153,8 +153,10 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
 
   // function updates pins
   const updatePin = async (index: number, show: boolean) => {
+    logToRosout("updatePin: starting!");
     if (!context || !context.advertise || !context.publish) {
       // throw error?
+      logToRosout("updatePin: could not publish message!");
       return;
     }
 
@@ -195,6 +197,8 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
       ],
       "position_covariance_type": 0
     });
+
+    logToRosout("updatePin: published message!");
   }
 
   // testing function delete me
@@ -377,25 +381,7 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   }, [renderDone]);
 
 
-
-// ============================= CSS STYLES =============================
-  const gridItemStyle = { 
-    textOverflow: "ellipsis", 
-    overflow: "hidden", 
-    whiteSpace: "nowrap" 
-  };
-  const gridTextboxStyle = { 
-    background: "none", 
-    color: "white", 
-    border: "none",
-    textOverflow: "ellipsis", 
-    overflow: "hidden",
-    whiteSpace: "nowrap",
-    width: "100%",
-    
-  };
-
-  const updateSavedPosition = (property: keyof typeof savedPositions[0], index: number, value: string | number) => {
+  const updateSavedPosition = async (property: keyof typeof savedPositions[0], index: number, value: string | number) => {
     // logToRosout("Updating index " + index + " to " + value);
     if (property == "name" && value == "DELETE") {
       setSavedPositions(prev => prev.filter((_, i) => i !== index));
@@ -424,6 +410,9 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
           .gridItemStyle {
             overflow: hidden;
             white-space: nowrap;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
           }
           .gridTextboxStyle {
             background: none;
@@ -434,48 +423,90 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             white-space: nowrap;
             width: 100%;
           }
+          .gridHeaderStyle {
+            border-bottom: 1px solid;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
+          }
+
+
+          input[type='checkbox'] {
+            -moz-appearance: none;
+            -webkit-appearance: none;
+            appearance: none;
+            vertical-align: middle;
+            outline: none;
+            font-size: inherit;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            background: #202020;
+            border-radius: 0.25em;
+            border: 0.125em solid #555;
+            position: relative;
+            margin: 0;
+          }
+
+          input[type='checkbox']:checked {
+            background: #FFFFFF;
+            box-shadow: 0px 0px 2px 3px rgba(0,0,0,0.75) inset;
+          }
+
+          input[type='radio'] {
+            -moz-appearance: none;
+            -webkit-appearance: none;
+            appearance: none;
+            vertical-align: middle;
+            outline: none;
+            font-size: inherit;
+            cursor: pointer;
+            /* max-width: 100%; */
+            height: 100%;
+            background: #202020;
+            /* border-radius: 0.25em; */
+            border-radius: 50%;
+            border: 0.125em solid #555;
+            position: relative;
+            margin: 0;
+            aspect-ratio: 1;
+          }
+
+          input[type='radio']:checked {
+            background: #FFFFFF;
+            box-shadow: 0px 0px 2px 3px rgba(0,0,0,0.75) inset;
+          }
         `}
       </style>
-      <h2>GPS Tracker</h2>
-      {/* <p>
-        Check the{" "}
-        <a href="https://foxglove.dev/docs/studio/extensions/getting-started">documentation</a> for
-        more details on building extension panels for Foxglove Studio.
-      </p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", rowGap: "0.2rem" }}>
-        <b style={{ borderBottom: "1px solid" }}>Topic</b>
-        <b style={{ borderBottom: "1px solid" }}>Schema name</b>
-        {(topics ?? []).map((topic) => (
-          <>
-            <div key={topic.name}>{topic.name}</div>
-            <div key={topic.schemaName}>{topic.schemaName}</div>
-          </>
-        ))}
-      </div>
-      <div>{messages?.length}</div> */}
-
-
+      <h1>GPS Tracker</h1>
       <h3>Current Position</h3>
       <div>
         {lastMessage ? (
           
-          <div style={{ display: "grid", gridTemplateColumns: "5fr 5fr 5fr 5fr 1fr 1fr", rowGap: "0.2rem", overflow: "hidden", border: "1px solid"}}>
-            <b style={{ borderBottom: "1px solid" }}>Name</b>
-            <b style={{ borderBottom: "1px solid" }}>Latitude</b>
-            <b style={{ borderBottom: "1px solid" }}>Longitude</b>
-            <b style={{ borderBottom: "1px solid" }}>Timestamp</b>
-            <b style={{ borderBottom: "1px solid" }}>Compare</b>
-            <b style={{ borderBottom: "1px solid" }}>Distance</b>
+          <div style={{ display: "grid", gridTemplateColumns: "3fr 5fr 5fr 3fr 0.6fr 1.4fr", rowGap: "0.2rem", overflow: "hidden", border: "1px solid"}}>
+            <b className="gridHeaderStyle">Name</b>
+            <b className="gridHeaderStyle">Latitude</b>
+            <b className="gridHeaderStyle">Longitude</b>
+            <b className="gridHeaderStyle">Timestamp</b>
+            <b className="gridHeaderStyle">Compare</b>
+            <b className="gridHeaderStyle">Distance</b>
             
-
-            {/* idk if this is the proper way to access ROS message data */}
-            <input type="text" id="current-tag-name" defaultValue="Current" style={{background: "none", color: "white", border: "none"}}/>
-            <div>{(lastMessage.message as any).latitude}</div>
-            <div>{(lastMessage.message as any).longitude}</div>
+            <input
+              type="text"
+              id="current-tag-name"
+              defaultValue="Current"
+              className="gridTextboxStyle"
+            />
+            <div className="gridItemStyle">{(lastMessage.message as any).latitude}</div>
+            <div className="gridItemStyle">{(lastMessage.message as any).longitude}</div>
             {/* <div>{new Date((lastMessage.message as any).header.stamp.nsec??0).toUTCString()}</div> */}
-            <div>{new Date((lastMessage.message as any).header.stamp.sec * 1000 + (lastMessage.message as any).header.stamp.nsec / 1e6).toUTCString()}</div>
-            <input type="radio" name="compare" />
-            <div>-</div>
+            <div className="gridItemStyle">{new Date((lastMessage.message as any).header.stamp.sec * 1000 + (lastMessage.message as any).header.stamp.nsec / 1e6).toUTCString()}</div>
+            <div className="gridItemStyle">
+              <input type="radio" name="compare" />
+            </div>
+            <div className="gridItemStyle">0 m</div>
 
           </div>
         ) : (
@@ -483,8 +514,6 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
         )}
       </div>
       <button onClick={saveCurrentPosition} style={{ marginTop: "1rem" }}>Save Current Position</button>
-      
-
       
       <h3>Input Custom Position</h3>
       <dialog id="CustomPositionDialog">
@@ -520,21 +549,19 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
       </div>
 
       <h3>Saved Positions</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "5fr 5fr 5fr 5fr 1fr 1fr 1fr", rowGap: "0.2rem", overflow: "hidden", border: "1px solid"}}>
-      <b style={{ borderBottom: "1px solid" }}>Name</b>
-        <b style={{ borderBottom: "1px solid" }}>Latitude</b>
-        <b style={{ borderBottom: "1px solid" }}>Longitude</b>
-        <b style={{ borderBottom: "1px solid" }}>Timestamp</b>
-        <b style={{ borderBottom: "1px solid" }}>Compare</b>
-        <b style={{ borderBottom: "1px solid" }}>Distance</b>
-        <b style={{ borderBottom: "1px solid" }}>Pin</b>
+      <div style={{ display: "grid", gridTemplateColumns: "3fr 5fr 5fr 3fr 0.6fr 1.4fr 1fr", rowGap: "0.2rem", overflow: "hidden", border: "1px solid"}}>
+        <b className="gridHeaderStyle">Name</b>
+        <b className="gridHeaderStyle">Latitude</b>
+        <b className="gridHeaderStyle">Longitude</b>
+        <b className="gridHeaderStyle">Timestamp</b>
+        <b className="gridHeaderStyle">Compare</b>
+        <b className="gridHeaderStyle">Distance</b>
+        <b className="gridHeaderStyle">Pin</b>
         {savedPositions.map((position, index) => (
           <>
-            {/* <div key={`name-${index}`}>{position.name}</div> */}
-            {/* <input type="text">{position.name}</input> */}
             <input
               type="text"
-              value={position.name.toString()} // Set the initial value to position.name
+              value={position.name.toString()}
               className="gridTextboxStyle"
               onChange={e => {
                 updateSavedPosition("name", index, e.target.value);
@@ -573,7 +600,8 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
           </>
         ))}
       </div>
-
+      
+      <button onClick={saveCurrentPosition} style={{ marginTop: "1rem" }}>Toggle All Pins</button>
     </div>
   );
 }
