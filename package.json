@@ -2,7 +2,7 @@
   "name": "gps-tracker",
   "displayName": "gps-tracker",
   "description": "Pin GPS positions and view them on a Map",
-  "publisher": "University of Manitoba Robotics Team",
+  "publisher": "UMRT",
   "homepage": "https://umrt.ca/",
   "version": "0.0.1",
   "license": "MPL-2.0",
