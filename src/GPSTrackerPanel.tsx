@@ -1,8 +1,7 @@
 import { Immutable, MessageEvent, PanelExtensionContext, SettingsTreeAction, Topic } from "@foxglove/extension";
 import { ReactElement, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-// import { property, set } from "lodash";
-import { set } from "lodash";
+import { property, set, values } from "lodash";
 
 type Config = {
   navigationTopic?: string
@@ -13,13 +12,10 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
   const [lastMessage, setLastMessage] = useState<undefined | MessageEvent>(); // state for the last message ("Current Position")
   // const [savedPositions, setSavedPositions] = useState<Array<{ name: String; latitude: number; longitude: number; timestamp: string, distance: number }>>([]); // state for saved positions
-  const [savedPositions, setSavedPositions] = useState<Array<{ name: string; latitude: number; longitude: number; timestamp: string; distance: number }>>(() => {
-    const initialState = context.initialState as { savedPositions?: Array<{ name: string; latitude: number; longitude: number; timestamp: string; distance: number }> };
+  const [savedPositions, setSavedPositions] = useState<Array<{ name: string; latitude: number; longitude: number; timestamp: string; distance: number, pinned: boolean }>>(() => {
+    const initialState = context.initialState as { savedPositions?: Array<{ name: string; latitude: number; longitude: number; timestamp: string; distance: number, pinned: boolean }> };
     return initialState?.savedPositions ?? []; // Restore savedPositions or initialize as an empty array
   });
-  // const [customLatitude, setCustomLatitude] = useState<string>(""); // state for manual latitude input
-  // const [customLongitude, setCustomLongitude] = useState<string>(""); // state for manual longitude input
-  // const [customName] = useState<string>("");
 
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
 
@@ -67,74 +63,90 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
       const timestamp = new Date((lastMessage.message as any).header.stamp.sec * 1000 + (lastMessage.message as any).header.stamp.nsec / 1e6).toISOString();
       
       const distance = -1;
+      const pinned = false;
 
-      setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance }]);
+      setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance, pinned }]);
     }
     else {
       logToRosout("FAILED");
     }
   };
 
-  // Function to save custom GPS coordinates
-  // const saveCustomPosition = () => {
-  //   const nameInput = document.getElementById("custom-tag-name") as HTMLInputElement;
-  //   const name = nameInput ? nameInput.value : "-";
-
-  //   // const latitude = parseFloat(customLatitude);
-  //   // const longitude = parseFloat(customLongitude);
-  //   const latitudeInput = document.getElementById("custom-tag-latitude") as HTMLInputElement;
-  //   const latitude = parseFloat(latitudeInput ? latitudeInput.value : "-1");
-  //   const longitudeInput = document.getElementById("custom-tag-longitude") as HTMLInputElement;
-  //   const longitude = parseFloat(longitudeInput ? longitudeInput.value : "-1");
-
-  //   const distance = -1;
-
-  //   const timestamp = new Date().toISOString(); // Use current timestamp for custom positions
-  //   setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance }]);
-  //   // setCustomLatitude(""); // Clear input fields
-  //   // setCustomLongitude("");
-  // };
-
   const saveCustomPosition = (name: string, latitude: number, longitude: number) => {
     const timestamp = new Date().toISOString();
     const distance = -1;
+    const pinned = false;
 
-    setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance }]);
+    setSavedPositions((prev) => [...prev, { name, latitude, longitude, timestamp, distance, pinned }]);
   }
 
+  
+  const calculateDistance = (lat1: number, long1: number, lat2: number, long2: number) => {
+    const EarthR = 6371000;
+    const dLat = ((lat1 - lat2) * Math.PI) / 180;
+    const dLon = ((long1 - long2) * Math.PI) / 180;
+    const lati1 = (lat2 * Math.PI) / 180;
+    const lati2 = (lat1 * Math.PI) / 180;
 
-  // function that updates comparing distances
-  const updateDistances = async (index: number) => {
-    const updatedPositions = await new Promise<Array<typeof savedPositions[0]>>((resolve) => {
-      const selectedPosition = savedPositions[index];
-      if (!selectedPosition) return;
-      const positions = savedPositions.map((position, i) => {
-        if (i === index) {
-          return { ...position, distance: 0 };
-        } else {
-          const R = 6371000;
-          const dLat = ((position.latitude - selectedPosition.latitude) * Math.PI) / 180;
-          const dLon = ((position.longitude - selectedPosition.longitude) * Math.PI) / 180;
-          const lat1 = (selectedPosition.latitude * Math.PI) / 180;
-          const lat2 = (position.latitude * Math.PI) / 180;
-  
-          const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          
-          const distance = Math.round((R * c) * 10) / 10; // value in meters
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lati1) * Math.cos(lati2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    
+    return Math.round((EarthR * c) * 10) / 10; // output distance in meters
+  }
 
-          // convert distance to nice numbers (m, km, ..? lightyears? actually idk OH just put it in the output)
+const updateDistances = () => {
+  // Find which radio is checked if not provided
   
-          return { ...position, distance };
-        }
-      });
-      resolve(positions);
-    });
+  const radioButtons = document.querySelectorAll('input[name="compare"]');
+  const index = Array.from(radioButtons).findIndex(radio => (radio as HTMLInputElement).checked);
   
-    setSavedPositions(updatedPositions);
-  };
+
+  // If "Current Position" is selected (index 0)
+  if (index === 0 && lastMessage) {
+    // Calculate distances from current position to all saved positions
+    const currentLat = (lastMessage.message as any).latitude;
+    const currentLon = (lastMessage.message as any).longitude;
+
+    setSavedPositions(prev =>
+      prev.map(pos => ({
+        ...pos,
+        distance: calculateDistance(currentLat, currentLon, pos.latitude, pos.longitude)
+      }))
+    );
+    // Optionally: store/display "0" for the current position's distance somewhere
+    const currentDistanceElem = document.getElementById('current-distance');
+    if (currentDistanceElem) {
+      currentDistanceElem.innerText = "0 m";
+    }
+    return;
+  }
+
+  // If a saved position is selected (index > 0)
+  if (index > 0 && savedPositions[index - 1] && lastMessage) {
+    const selected = savedPositions[index - 1];
+    const currentLat = (lastMessage.message as any).latitude;
+    const currentLon = (lastMessage.message as any).longitude;
+
+    setSavedPositions(prev =>
+      prev.map((pos, i) => ({
+        ...pos,
+        distance: i === (index - 1) || selected == null
+          ? 0
+          : calculateDistance(selected.latitude, selected.longitude, pos.latitude, pos.longitude)
+      }))
+    );
+    // Optionally: store/display distance from selected saved position to current position
+    const currentDistanceElem = document.getElementById('current-distance');
+    if (currentDistanceElem && selected != null) {
+      currentDistanceElem.innerText = formatDistance(
+        calculateDistance(selected.latitude, selected.longitude, currentLat, currentLon)
+      );
+    }
+    return;
+  }
+};
 
   const formatDistance = (distance: number) => {
     // convert m to nice format (cm, m, km)
@@ -154,6 +166,10 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   // function updates pins
   const updatePin = async (index: number, show: boolean) => {
     logToRosout("updatePin: starting!");
+
+    if (savedPositions[index])
+      savedPositions[index].pinned = show;
+
     if (!context || !context.advertise || !context.publish) {
       // throw error?
       logToRosout("updatePin: could not publish message!");
@@ -200,90 +216,7 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
 
     logToRosout("updatePin: published message!");
   }
-
-  // testing function delete me
-  const myTestingFunction = () => {
-    if (!context || !context.advertise || !context.publish) {
-      // throw error?
-      return;
-    }
-    
-    for (var i = 0; i < 3; i++) {
-      context.advertise(`/navigation_pin_${i}`, "sensor_msgs/msg/NavSatFix");
-      
-      context.publish(`/navigation_pin_${i}`, {
-        "header": {
-          "stamp": {
-            "sec": 0,
-            "nanosec": 0
-          },
-          "frame_id": ""
-        },
-        "status": {
-          "status": 0,
-          "service": 0
-        },
-        "latitude": 0,
-        "longitude": 0,
-        "altitude": 0,
-        "position_covariance": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "position_covariance_type": 0
-      });
-    }
-  }
-
-  const myTestingFunction2 = () => {
-    if (!context || context == null) {
-      // setFeedback('Error: Service call function not available. Is your ROS 2 connection active?');
-      // Revert UI state if service call not possible
-      // setCurrentState(!command_bool); 
-      return;
-    }
-    
-    if (context.advertise) {
-      context.advertise("/navigation3", "sensor_msgs/msg/NavSatFix");
-    }
-    if (context.publish) {
-      context.publish("/navigation3", {
-        "header": {
-          "stamp": {
-            "sec": 0,
-            "nanosec": 0
-          },
-          "frame_id": ""
-        },
-        "status": {
-          "status": 0,
-          "service": 0
-        },
-        "latitude": 0,
-        "longitude": 0,
-        "altitude": 0,
-        "position_covariance": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "position_covariance_type": 0
-      })
-    }
-  }
+  
 
   const logToRosout = (message: string, level: number = 1) => {
     if (!context || !context.publish || !context.advertise) {
@@ -298,12 +231,12 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
         sec: Math.floor(Date.now() / 1000),
         nanosec: (Date.now() % 1000) * 1e6,
       },
-      level, // Log level (1 = DEBUG, 2 = INFO, etc.)
+      level, // Log level
       name: "foxglove_panel",
       msg: message,
       file: "GPSTrackerPanel.tsx",
       function: "logToRosout",
-      line: 1, // You can set this dynamically if needed
+      line: 1,
     });
   };
 
@@ -358,7 +291,6 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
 
     context.watch("topics");
     context.watch("currentFrame");
-    // context.subscribe([{ topic: "/some/topic" }]);
   }, [context]);
 
   //read all incoming messages
@@ -366,14 +298,18 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
     if (messages) {
       for (const message of messages) {
         if (message.topic === config.navigationTopic) {
-          // LOG MESSAGE
-          console.log("ReCEIVED MESSAGE");
 
-          setLastMessage(message); // set text under "Current Position"
+          setLastMessage(message); // update Current Position
+
         }
       }
     }
   }, [messages]);
+
+  // also updateDistances when receiving a message
+  useEffect(() => {
+    updateDistances();
+  }, [lastMessage]);
 
   // invoke the done callback once the render is complete
   useEffect(() => {
@@ -384,16 +320,65 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
   const updateSavedPosition = async (property: keyof typeof savedPositions[0], index: number, value: string | number) => {
     // logToRosout("Updating index " + index + " to " + value);
     if (property == "name" && value == "DELETE") {
+
+      // VISUALLY UNCHECK EVERYTHING
+      var allPins = document.getElementsByName("pin");
+      var savedStates: boolean[] = [];
+      allPins.forEach((pin, i) => {
+        var savedState = savedPositions[i]?.pinned ?? false;
+
+        (pin as HTMLInputElement).checked = savedState;
+        updatePin(i, false); // unpin  
+
+        if (i != index) {savedStates.push(savedState);}
+      });
+
+      // remove deleted one
       setSavedPositions(prev => prev.filter((_, i) => i !== index));
+      
+      logToRosout("Adding them back: with " + savedStates.length);
+      // visually add them back
+      savedStates.forEach((state, i) => {
+        (allPins[i] as HTMLInputElement).checked = state;
+        if (state) updatePin(i, state);
+      });
+
       return;
     }
+
     setSavedPositions(prev =>
       prev.map((pos, i) =>
         i === index ? { ...pos, [property]: value } : pos
       )
     );
   };
+
+
+  const toggleAllPins = async () => {
+    var allPins = document.getElementsByName("pin");
+    if (allPins.length <= 0) return;
+    var state = !(allPins[0] as HTMLInputElement).checked;
+    allPins.forEach((pin, i) => {
+      (pin as HTMLInputElement).checked = state;
+      // (pin as HTMLInputElement).dispatchEvent(new Event("onchange"));
+      updatePin(i, state);
+    });
+  };
   
+  const deleteAllPins = async () => {
+    savedPositions.forEach((position, index) => {
+      updatePin(index, false);
+    })
+    setSavedPositions([]);
+  }
+
+  function getSelectedIndex() {
+    const radioButtons = document.querySelectorAll('input[name="compare"]');
+    const selectedIndex = Array.from(radioButtons).findIndex(radio => (radio as HTMLInputElement).checked);
+
+    logToRosout("SELECTED RADIO INDEX: " + selectedIndex);
+}
+
 
   return (
     <div style={{ padding: "1rem" }}>
@@ -411,7 +396,6 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             overflow: hidden;
             white-space: nowrap;
             text-overflow: ellipsis;
-            white-space: nowrap;
             width: 100%;
           }
           .gridTextboxStyle {
@@ -428,7 +412,6 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             overflow: hidden;
             white-space: nowrap;
             text-overflow: ellipsis;
-            white-space: nowrap;
             width: 100%;
           }
 
@@ -504,9 +487,9 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             {/* <div>{new Date((lastMessage.message as any).header.stamp.nsec??0).toUTCString()}</div> */}
             <div className="gridItemStyle">{new Date((lastMessage.message as any).header.stamp.sec * 1000 + (lastMessage.message as any).header.stamp.nsec / 1e6).toUTCString()}</div>
             <div className="gridItemStyle">
-              <input type="radio" name="compare" />
+              <input type="radio" name="compare" onClick={updateDistances}/>
             </div>
-            <div className="gridItemStyle">0 m</div>
+            <div className="gridItemStyle" id="current-distance">0 m</div>
 
           </div>
         ) : (
@@ -514,8 +497,9 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
         )}
       </div>
       <button onClick={saveCurrentPosition} style={{ marginTop: "1rem" }}>Save Current Position</button>
+      <button onClick={() => {(document.getElementById("CustomPositionDialog") as HTMLDialogElement)?.showModal();}}>Custom Position Dialog</button>
       
-      <h3>Input Custom Position</h3>
+      {/* <h3>Input Custom Position</h3> */}
       <dialog id="CustomPositionDialog">
         <form method="dialog">
           <p>
@@ -539,14 +523,7 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
           </div>
         </form>
       </dialog>
-      {/* <button onClick={saveCustomPosition} style={{ marginTop: "1rem" }}>Save Custom Position</button> */}
-      <button onClick={() => {(document.getElementById("CustomPositionDialog") as HTMLDialogElement)?.showModal();}} style={{ marginTop: "1rem" }}>Open dialog</button>
       
-      
-      <div>
-        <button onClick={myTestingFunction} style={{ marginTop: "1rem", display: "none" }}>TEST 1</button>
-        <button onClick={myTestingFunction2} style={{ marginTop: "1rem", display: "none" }}>TEST 2</button>
-      </div>
 
       <h3>Saved Positions</h3>
       <div style={{ display: "grid", gridTemplateColumns: "3fr 5fr 5fr 3fr 0.6fr 1.4fr 1fr", rowGap: "0.2rem", overflow: "hidden", border: "1px solid"}}>
@@ -591,17 +568,20 @@ function GPSTrackerPanel({ context }: { context: PanelExtensionContext }): React
             />
             <div key={`compare-${index}`}>
               {/* <input type="radio" name="compare" value={index} /> */}
-              <input type="radio" name="compare" onClick={() => updateDistances(index)}/>
+              <input type="radio" name="compare" onClick={() => updateDistances()}/>
             </div>
-            <div className="gridItemStyle" key={`distance-${index}`}>{formatDistance(position.distance)}</div>
+            <div style={{whiteSpace: "nowrap"}} key={`distance-${index}`}>{formatDistance(position.distance)}</div>
             <div key={`pinbox-${index}`}>
-              <input type="checkbox" name="pin" onChange={(e) => updatePin(index, e.target.checked)}/>
+              <input type="checkbox" name="pin" defaultChecked={position.pinned} onChange={(e) => updatePin(index, e.target.checked)}/>
             </div>
           </>
         ))}
       </div>
       
-      <button onClick={saveCurrentPosition} style={{ marginTop: "1rem" }}>Toggle All Pins</button>
+      <button onClick={toggleAllPins} style={{ marginTop: "1rem" }}>Toggle All Pins</button>
+      <button onClick={deleteAllPins} style={{ marginTop: "1rem" }}>Delete All Pins</button>
+      <button onClick={getSelectedIndex} style={{ marginTop: "1rem" }}>Debug</button>
+      
     </div>
   );
 }
